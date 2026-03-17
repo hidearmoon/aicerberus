@@ -6,8 +6,6 @@ import re
 import sys
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 import httpx
 
 from aicerberus.models import CVEInfo, DependencyFinding, Severity
@@ -16,6 +14,8 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+logger = logging.getLogger(__name__)
 
 # Known AI/ML packages to flag for deeper scanning
 AI_ML_PACKAGES = frozenset(

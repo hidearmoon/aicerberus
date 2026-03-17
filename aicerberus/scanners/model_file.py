@@ -7,9 +7,9 @@ import logging
 import pickletools
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from aicerberus.models import ModelFileFinding, RiskType, Severity
+
+logger = logging.getLogger(__name__)
 
 # Model file extensions and their risk profiles
 MODEL_EXTENSIONS: dict[str, dict] = {

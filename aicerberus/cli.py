@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import sys
 from pathlib import Path
 
@@ -271,6 +272,7 @@ def main() -> None:
     help="Write output to file instead of stdout.",
 )
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Suppress progress messages.")
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Enable verbose logging (shows warnings and debug info).")
 def scan(
     path: Path,
     output_format: str,
@@ -282,6 +284,7 @@ def scan(
     hf_token: str | None,
     output: Path | None,
     quiet: bool,
+    verbose: bool,
 ) -> None:
     """Scan PATH for AI/ML supply chain risks.
 
@@ -292,6 +295,14 @@ def scan(
       1  — one or more risks found
       2  — scan error
     """
+    if verbose:
+        logging.basicConfig(
+            level=logging.DEBUG,
+            format="%(levelname)s  %(name)s: %(message)s",
+        )
+    else:
+        logging.basicConfig(level=logging.WARNING)
+
     target = path.resolve()
 
     # Progress display (suppressed in quiet mode or non-table output)

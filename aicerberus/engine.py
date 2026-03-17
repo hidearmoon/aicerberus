@@ -5,13 +5,13 @@ import logging
 from pathlib import Path
 from typing import Callable
 
-logger = logging.getLogger(__name__)
-
 from aicerberus.models import ScanResult
 from aicerberus.scanners.dependency import DependencyScanner
 from aicerberus.scanners.license import LicenseScanner
 from aicerberus.scanners.model_file import ModelFileScanner
 from aicerberus.scanners.sbom import SBOMGenerator
+
+logger = logging.getLogger(__name__)
 
 
 class ScanEngine:

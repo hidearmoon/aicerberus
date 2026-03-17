@@ -8,8 +8,6 @@ import re
 import sys
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 import httpx
 
 from aicerberus.models import LicenseFinding, Severity
@@ -18,6 +16,8 @@ if sys.version_info >= (3, 11):
     import tomllib
 else:
     import tomli as tomllib
+
+logger = logging.getLogger(__name__)
 
 # ─── License risk database ────────────────────────────────────────────────────
 # Maps license SPDX ID (or common name) → (restriction_type, severity, description)
