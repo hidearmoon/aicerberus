@@ -98,3 +98,18 @@ class TestScanEngine:
 
         assert sbom["bomFormat"] == "CycloneDX"
         assert "metadata" in sbom
+
+    def test_check_hf_api_false_passed_to_license_scanner(self, tmp_project: Path):
+        """ScanEngine(check_hf_api=False) passes check_hf_api=False to LicenseScanner.scan()."""
+        with patch("aicerberus.engine.DependencyScanner") as dep_cls, \
+             patch("aicerberus.engine.ModelFileScanner") as model_cls, \
+             patch("aicerberus.engine.LicenseScanner") as lic_cls:
+
+            dep_cls.return_value.scan.return_value = []
+            model_cls.return_value.scan.return_value = []
+            lic_cls.return_value.scan.return_value = []
+
+            engine = ScanEngine(check_hf_api=False)
+            engine.scan(tmp_project)
+
+        lic_cls.return_value.scan.assert_called_once_with(tmp_project, check_hf_api=False)

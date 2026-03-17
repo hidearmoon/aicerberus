@@ -107,6 +107,12 @@ cerberus scan . --hf-token $HF_TOKEN
 # or set env var: export HF_TOKEN=hf_...
 ```
 
+### Air-gapped / offline environments
+
+```bash
+cerberus scan . --no-hf-api   # skip all HuggingFace API calls
+```
+
 ---
 
 ## Output Example

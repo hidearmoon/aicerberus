@@ -373,8 +373,14 @@ class LicenseScanner:
 
     # ── Main scan entrypoint ──────────────────────────────────────────────────
 
-    def scan(self, path: Path) -> list[LicenseFinding]:
-        """Scan all license-bearing artifacts under path."""
+    def scan(self, path: Path, *, check_hf_api: bool = True) -> list[LicenseFinding]:
+        """Scan all license-bearing artifacts under path.
+
+        Args:
+            path: Directory to scan.
+            check_hf_api: If False, skip HuggingFace API lookups entirely.
+                Useful in air-gapped / CI environments with restricted network access.
+        """
         findings: list[LicenseFinding] = []
 
         # 1. Local HuggingFace config.json files
@@ -391,15 +397,18 @@ class LicenseScanner:
 
         # 3. HuggingFace API lookup for auto-discovered model IDs
         #    Deduplicates against model IDs already found via local config.json.
-        already_found: set[str] = {
-            f.package_or_model for f in findings if f.source in ("huggingface", "local")
-        }
-        for model_id in sorted(self._discover_hf_model_ids(path)):
-            if model_id in already_found:
-                continue
-            finding = self.check_hf_model(model_id)
-            if finding:
-                findings.append(finding)
-                already_found.add(model_id)
+        if check_hf_api:
+            already_found: set[str] = {
+                f.package_or_model for f in findings if f.source in ("huggingface", "local")
+            }
+            for model_id in sorted(self._discover_hf_model_ids(path)):
+                if model_id in already_found:
+                    continue
+                finding = self.check_hf_model(model_id)
+                if finding:
+                    findings.append(finding)
+                    already_found.add(model_id)
+        else:
+            logger.debug("HuggingFace API lookup skipped (--no-hf-api)")
 
         return findings

@@ -21,11 +21,13 @@ class ScanEngine:
         self,
         osv_timeout: float = 30.0,
         hf_api_token: str | None = None,
+        check_hf_api: bool = True,
         progress_callback: Callable[[str], None] | None = None,
     ) -> None:
         self._dep_scanner = DependencyScanner(timeout=osv_timeout)
         self._model_scanner = ModelFileScanner()
         self._license_scanner = LicenseScanner(hf_api_token=hf_api_token)
+        self._check_hf_api = check_hf_api
         self._sbom_gen = SBOMGenerator()
         self._progress = progress_callback or (lambda _: None)
 
@@ -59,7 +61,9 @@ class ScanEngine:
         if not skip_licenses:
             self._progress("Checking license compliance…")
             try:
-                result.license_findings = self._license_scanner.scan(path)
+                result.license_findings = self._license_scanner.scan(
+                    path, check_hf_api=self._check_hf_api
+                )
             except Exception as exc:  # pragma: no cover
                 logger.warning("License scan error: %s", exc, exc_info=True)
                 result.scan_errors.append(f"License scan error: {exc}")

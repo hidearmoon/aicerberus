@@ -143,6 +143,24 @@ class TestCliScanCommand:
             call_kwargs = mock_engine.scan.call_args[1]
             assert call_kwargs["skip_models"] is True
 
+    def test_scan_no_hf_api_flag(self, runner: CliRunner, tmp_path: Path):
+        with patch("aicerberus.cli.ScanEngine") as mock_engine_cls:
+            mock_engine = MagicMock()
+            mock_engine.scan.return_value = ScanResult(target_path=tmp_path)
+            mock_engine_cls.return_value = mock_engine
+            runner.invoke(main, ["scan", str(tmp_path), "--no-hf-api"])
+            init_kwargs = mock_engine_cls.call_args[1]
+            assert init_kwargs["check_hf_api"] is False
+
+    def test_scan_hf_api_enabled_by_default(self, runner: CliRunner, tmp_path: Path):
+        with patch("aicerberus.cli.ScanEngine") as mock_engine_cls:
+            mock_engine = MagicMock()
+            mock_engine.scan.return_value = ScanResult(target_path=tmp_path)
+            mock_engine_cls.return_value = mock_engine
+            runner.invoke(main, ["scan", str(tmp_path)])
+            init_kwargs = mock_engine_cls.call_args[1]
+            assert init_kwargs["check_hf_api"] is True
+
     def test_version_flag(self, runner: CliRunner):
         result = runner.invoke(main, ["--version"])
         assert result.exit_code == 0

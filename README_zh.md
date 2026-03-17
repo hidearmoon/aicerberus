@@ -107,6 +107,12 @@ cerberus scan . --hf-token $HF_TOKEN
 # 或设置环境变量：export HF_TOKEN=hf_...
 ```
 
+### 离线 / 内网环境
+
+```bash
+cerberus scan . --no-hf-api   # 跳过所有 HuggingFace API 请求
+```
+
 ---
 
 ## 输出示例

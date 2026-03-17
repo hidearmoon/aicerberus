@@ -432,3 +432,18 @@ class TestScanHFIntegration:
         assert len(hf_findings) == 1
         assert hf_findings[0].package_or_model == "meta-llama/Llama-2-7b-hf"
         assert hf_findings[0].severity == Severity.HIGH
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_no_hf_api_skips_api_calls(self, mock_client_cls, tmp_path: Path):
+        """scan(check_hf_api=False) must not make any HuggingFace API requests."""
+        src = tmp_path / "infer.py"
+        src.write_text('model = AutoModel.from_pretrained("facebook/opt-125m")\n', encoding="utf-8")
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path, check_hf_api=False)
+
+        # No HTTP calls should have been made
+        mock_client_cls.assert_not_called()
+        # No HuggingFace findings
+        hf_findings = [f for f in findings if f.source == "huggingface"]
+        assert hf_findings == []

@@ -266,6 +266,13 @@ def main() -> None:
     help="HuggingFace API token for private model card lookups.",
 )
 @click.option(
+    "--no-hf-api",
+    "disable_hf_api",
+    is_flag=True,
+    default=False,
+    help="Disable HuggingFace API lookups (useful in air-gapped / CI environments).",
+)
+@click.option(
     "--output", "-o",
     type=click.Path(path_type=Path),
     default=None,
@@ -282,6 +289,7 @@ def scan(
     skip_models: bool,
     skip_licenses: bool,
     hf_token: str | None,
+    disable_hf_api: bool,
     output: Path | None,
     quiet: bool,
     verbose: bool,
@@ -313,7 +321,11 @@ def scan(
             console.print(f"  [dim]{msg}[/dim]")
         progress_msgs.append(msg)
 
-    engine = ScanEngine(hf_api_token=hf_token, progress_callback=_progress)
+    engine = ScanEngine(
+        hf_api_token=hf_token,
+        check_hf_api=not disable_hf_api,
+        progress_callback=_progress,
+    )
 
     if not quiet and output_format == "table":
         console.print(
