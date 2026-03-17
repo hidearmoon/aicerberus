@@ -1,9 +1,12 @@
 """Dependency scanner: parse AI/ML dependencies and query OSV for CVEs."""
 from __future__ import annotations
 
+import logging
 import re
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import httpx
 
@@ -78,7 +81,8 @@ def _parse_pyproject_toml(content: bytes, source_file: str) -> list[tuple[str, s
     results = []
     try:
         data = tomllib.loads(content.decode())
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to parse pyproject.toml %s: %s", source_file, exc)
         return results
 
     # PEP 621 style
@@ -112,7 +116,8 @@ def _parse_pipfile(content: str, source_file: str) -> list[tuple[str, str, str]]
     results = []
     try:
         data = tomllib.loads(content if isinstance(content, str) else content.decode())
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to parse Pipfile %s: %s", source_file, exc)
         return results
     for section in ("packages", "dev-packages"):
         for pkg, ver_spec in data.get(section, {}).items():
@@ -230,8 +235,8 @@ class DependencyScanner:
                 return _parse_pyproject_toml(manifest.read_bytes(), str(manifest))
             elif name == "pipfile":
                 return _parse_pipfile(manifest.read_text(encoding="utf-8"), str(manifest))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to parse manifest %s: %s", manifest, exc)
         return []
 
     def filter_ai_dependencies(
@@ -259,7 +264,8 @@ class DependencyScanner:
                 resp = client.post(OSV_BATCH_URL, json={"queries": queries})
                 resp.raise_for_status()
                 results = resp.json().get("results", [])
-        except Exception:
+        except Exception as exc:
+            logger.warning("OSV batch query failed: %s", exc)
             return {}
 
         output: dict[tuple[str, str], list[dict]] = {}

@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import hashlib
 import io
+import logging
 import pickletools
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from aicerberus.models import ModelFileFinding, RiskType, Severity
 
@@ -85,9 +88,9 @@ def _analyze_pickle_opcodes(data: bytes) -> list[str]:
                 lower = arg.lower()
                 if any(kw in lower for kw in ("eval(", "exec(", "import os", "__import__")):
                     dangerous_found.append(f"SUSPICIOUS_STRING:{arg[:80]}")
-    except Exception:
+    except Exception as exc:
         # Corrupted or truncated pickle — not our job to fix it
-        pass
+        logger.warning("Failed to analyze pickle opcodes: %s", exc)
 
     return list(dict.fromkeys(dangerous_found))  # deduplicate, preserve order
 
@@ -113,8 +116,8 @@ def _analyze_pytorch_file(path: Path) -> list[str]:
             raw = path.read_bytes()
             if raw[:2] == _PYTORCH_MAGIC:
                 dangerous.extend(_analyze_pickle_opcodes(raw))
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning("Failed to analyze legacy PyTorch file %s: %s", path, exc)
     return dangerous
 
 
@@ -124,7 +127,8 @@ def _is_pytorch_zip(path: Path) -> bool:
         with open(path, "rb") as f:
             header = f.read(4)
         return header[:4] == _ZIP_MAGIC
-    except Exception:
+    except Exception as exc:
+        logger.warning("Failed to check PyTorch ZIP header for %s: %s", path, exc)
         return False
 
 

@@ -3,9 +3,12 @@ from __future__ import annotations
 
 import itertools
 import json
+import logging
 import re
 import sys
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 import httpx
 
@@ -191,7 +194,8 @@ class LicenseScanner:
                 if resp.status_code != 200:
                     return None
                 data = resp.json()
-        except Exception:
+        except Exception as exc:
+            logger.warning("HuggingFace API request failed for %s: %s", model_id, exc)
             return None
 
         license_id: str = ""
@@ -231,7 +235,8 @@ class LicenseScanner:
         """Check a local HuggingFace config.json or README for license info."""
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to read model card %s: %s", config_path, exc)
             return None
 
         license_id = data.get("license", "")
@@ -259,7 +264,8 @@ class LicenseScanner:
         findings: list[LicenseFinding] = []
         try:
             data = tomllib.loads(manifest.read_bytes().decode())
-        except Exception:
+        except Exception as exc:
+            logger.warning("Failed to parse pyproject.toml %s: %s", manifest, exc)
             return findings
 
         project = data.get("project", {})

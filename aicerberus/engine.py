@@ -1,8 +1,11 @@
 """Scan orchestration engine — coordinates all scanners."""
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Callable
+
+logger = logging.getLogger(__name__)
 
 from aicerberus.models import ScanResult
 from aicerberus.scanners.dependency import DependencyScanner
@@ -42,6 +45,7 @@ class ScanEngine:
             try:
                 result.dependency_findings = self._dep_scanner.scan(path)
             except Exception as exc:  # pragma: no cover
+                logger.warning("Dependency scan error: %s", exc, exc_info=True)
                 result.scan_errors.append(f"Dependency scan error: {exc}")
 
         if not skip_models:
@@ -49,6 +53,7 @@ class ScanEngine:
             try:
                 result.model_findings = self._model_scanner.scan(path)
             except Exception as exc:  # pragma: no cover
+                logger.warning("Model scan error: %s", exc, exc_info=True)
                 result.scan_errors.append(f"Model scan error: {exc}")
 
         if not skip_licenses:
@@ -56,6 +61,7 @@ class ScanEngine:
             try:
                 result.license_findings = self._license_scanner.scan(path)
             except Exception as exc:  # pragma: no cover
+                logger.warning("License scan error: %s", exc, exc_info=True)
                 result.scan_errors.append(f"License scan error: {exc}")
 
         return result
