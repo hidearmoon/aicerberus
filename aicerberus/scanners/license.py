@@ -1,7 +1,9 @@
 """License compliance scanner for AI/ML packages and model files."""
 from __future__ import annotations
 
+import itertools
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -286,6 +288,83 @@ class LicenseScanner:
                 )
         return findings
 
+    # ── HuggingFace model ID discovery ───────────────────────────────────────
+
+    # HF model ID: "owner/model-name" or bare "model-name"
+    # Valid chars: letters, digits, hyphens, underscores, dots (max 96 chars per segment)
+    _HF_ID_RE = r'[A-Za-z0-9][\w\-\.]{0,95}(?:/[\w\-\.]{1,96})?'
+
+    # Patterns that appear in Python source files
+    _PY_PATTERNS: list[str] = [
+        r'from_pretrained\s*\(\s*[\'"](' + _HF_ID_RE + r')[\'"]\s*[,\)]',
+        r'pipeline\s*\([^)]*\bmodel\s*=\s*[\'"](' + _HF_ID_RE + r')[\'"]',
+        r'\bmodel_id\s*=\s*[\'"](' + _HF_ID_RE + r')[\'"]',
+        r'\bmodel_name\s*=\s*[\'"](' + _HF_ID_RE + r')[\'"]',
+        r'\bbase_model\s*=\s*[\'"](' + _HF_ID_RE + r')[\'"]',
+    ]
+
+    # Patterns that appear in YAML / JSON config files
+    _YAML_PATTERN = r'(?:model_id|model_name|base_model|model)\s*:\s*[\'"]?(' + _HF_ID_RE + r')[\'"]?'
+    _JSON_PATTERN = r'"(?:model_id|model_name|base_model)"\s*:\s*"(' + _HF_ID_RE + r')"'
+
+    _SKIP_DIRS = frozenset({".git", "__pycache__", "node_modules", ".tox", ".venv", "venv"})
+
+    def _should_skip(self, file_path: Path) -> bool:
+        return bool(self._SKIP_DIRS.intersection(file_path.parts))
+
+    def _discover_hf_model_ids(self, path: Path) -> set[str]:
+        """Discover HuggingFace model IDs referenced anywhere in the project tree.
+
+        Scans Python source files (from_pretrained, pipeline, model_id=...),
+        YAML/YML configs, and JSON files for model references and returns
+        candidate model IDs suitable for HuggingFace API lookup.
+        """
+        model_ids: set[str] = set()
+
+        py_regexes = [re.compile(p) for p in self._PY_PATTERNS]
+        yaml_regex = re.compile(self._YAML_PATTERN, re.IGNORECASE)
+        json_regex = re.compile(self._JSON_PATTERN)
+
+        # Python source files
+        for py_file in path.rglob("*.py"):
+            if self._should_skip(py_file):
+                continue
+            try:
+                text = py_file.read_text(encoding="utf-8", errors="ignore")
+                for rx in py_regexes:
+                    for m in rx.finditer(text):
+                        model_ids.add(m.group(1))
+            except OSError:
+                continue
+
+        # YAML / YML config files
+        for yaml_file in itertools.chain(path.rglob("*.yaml"), path.rglob("*.yml")):
+            if self._should_skip(yaml_file):
+                continue
+            try:
+                text = yaml_file.read_text(encoding="utf-8", errors="ignore")
+                for m in yaml_regex.finditer(text):
+                    model_ids.add(m.group(1))
+            except OSError:
+                continue
+
+        # JSON files (non-config.json — config.json is handled by check_local_model_card)
+        for json_file in path.rglob("*.json"):
+            if json_file.name == "config.json" or self._should_skip(json_file):
+                continue
+            try:
+                text = json_file.read_text(encoding="utf-8", errors="ignore")
+                for m in json_regex.finditer(text):
+                    model_ids.add(m.group(1))
+            except OSError:
+                continue
+
+        # Filter out obvious non-HF values (local paths, URLs, empty strings)
+        return {
+            mid for mid in model_ids
+            if mid and not mid.startswith(("/", ".", "http://", "https://"))
+        }
+
     # ── Main scan entrypoint ──────────────────────────────────────────────────
 
     def scan(self, path: Path) -> list[LicenseFinding]:
@@ -303,5 +382,18 @@ class LicenseScanner:
         # 2. pyproject.toml project license
         for pyproject in path.rglob("pyproject.toml"):
             findings.extend(self._find_package_licenses_pyproject(pyproject))
+
+        # 3. HuggingFace API lookup for auto-discovered model IDs
+        #    Deduplicates against model IDs already found via local config.json.
+        already_found: set[str] = {
+            f.package_or_model for f in findings if f.source in ("huggingface", "local")
+        }
+        for model_id in sorted(self._discover_hf_model_ids(path)):
+            if model_id in already_found:
+                continue
+            finding = self.check_hf_model(model_id)
+            if finding:
+                findings.append(finding)
+                already_found.add(model_id)
 
         return findings

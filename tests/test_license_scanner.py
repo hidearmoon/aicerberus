@@ -222,3 +222,213 @@ class TestLicenseScannerHF:
         finding = scanner.check_hf_model("some/model")
         assert finding is not None
         assert finding.license_id == "agpl-3.0"
+
+
+class TestDiscoverHFModelIds:
+    """Tests for _discover_hf_model_ids()."""
+
+    def test_from_pretrained_in_python_file(self, tmp_path: Path):
+        src = tmp_path / "train.py"
+        src.write_text(
+            'model = AutoModel.from_pretrained("facebook/opt-125m")\n',
+            encoding="utf-8",
+        )
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "facebook/opt-125m" in ids
+
+    def test_pipeline_model_arg(self, tmp_path: Path):
+        src = tmp_path / "infer.py"
+        src.write_text(
+            'pipe = pipeline("text-generation", model="gpt2")\n',
+            encoding="utf-8",
+        )
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "gpt2" in ids
+
+    def test_model_id_assignment(self, tmp_path: Path):
+        src = tmp_path / "config.py"
+        src.write_text('model_id = "mistralai/Mistral-7B-v0.1"\n', encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "mistralai/Mistral-7B-v0.1" in ids
+
+    def test_base_model_assignment(self, tmp_path: Path):
+        src = tmp_path / "finetune.py"
+        src.write_text('base_model = "meta-llama/Llama-2-7b-hf"\n', encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "meta-llama/Llama-2-7b-hf" in ids
+
+    def test_yaml_model_id(self, tmp_path: Path):
+        cfg = tmp_path / "train_config.yaml"
+        cfg.write_text("model_id: stabilityai/stable-diffusion-2\nepochs: 10\n", encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "stabilityai/stable-diffusion-2" in ids
+
+    def test_yaml_base_model(self, tmp_path: Path):
+        cfg = tmp_path / "lora.yml"
+        cfg.write_text("base_model: 'meta-llama/Llama-2-13b-hf'\n", encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "meta-llama/Llama-2-13b-hf" in ids
+
+    def test_json_model_id(self, tmp_path: Path):
+        cfg = tmp_path / "settings.json"
+        cfg.write_text('{"model_id": "openai-community/gpt2", "batch_size": 8}', encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "openai-community/gpt2" in ids
+
+    def test_skips_local_paths(self, tmp_path: Path):
+        src = tmp_path / "load.py"
+        src.write_text(
+            'model = AutoModel.from_pretrained("/local/path/to/model")\n'
+            'model2 = AutoModel.from_pretrained("./relative/model")\n',
+            encoding="utf-8",
+        )
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert not any(mid.startswith(("/", ".")) for mid in ids)
+
+    def test_skips_git_dir(self, tmp_path: Path):
+        git_dir = tmp_path / ".git"
+        git_dir.mkdir()
+        hidden = git_dir / "hook.py"
+        hidden.write_text('from_pretrained("should/not-appear")\n', encoding="utf-8")
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "should/not-appear" not in ids
+
+    def test_empty_project(self, tmp_path: Path):
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert ids == set()
+
+    def test_multiple_models_in_one_file(self, tmp_path: Path):
+        src = tmp_path / "multi.py"
+        src.write_text(
+            'tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")\n'
+            'model = AutoModel.from_pretrained("distilbert-base-uncased")\n',
+            encoding="utf-8",
+        )
+        scanner = LicenseScanner()
+        ids = scanner._discover_hf_model_ids(tmp_path)
+        assert "bert-base-uncased" in ids
+        assert "distilbert-base-uncased" in ids
+
+
+class TestScanHFIntegration:
+    """Tests for HF API integration inside scan()."""
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_calls_hf_api_for_discovered_model(self, mock_client_cls, tmp_path: Path):
+        """scan() should query HF API for model IDs found in source code."""
+        src = tmp_path / "train.py"
+        src.write_text('model = AutoModel.from_pretrained("facebook/opt-125m")\n', encoding="utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"cardData": {"license": "cc-by-nc-4.0"}, "tags": []}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path)
+
+        hf_findings = [f for f in findings if f.source == "huggingface"]
+        assert len(hf_findings) == 1
+        assert hf_findings[0].package_or_model == "facebook/opt-125m"
+        assert hf_findings[0].license_id == "cc-by-nc-4.0"
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_deduplicates_local_and_hf(self, mock_client_cls, tmp_path: Path):
+        """Model found in local config.json should not trigger duplicate HF API call."""
+        # Local config.json with a model path that matches a source reference
+        model_dir = tmp_path / "my_model"
+        model_dir.mkdir()
+        (model_dir / "config.json").write_text('{"license": "cc-by-nc-4.0"}', encoding="utf-8")
+
+        # Python file referencing the same local dir (won't match HF ID pattern)
+        src = tmp_path / "load.py"
+        src.write_text('model = AutoModel.from_pretrained("./my_model")\n', encoding="utf-8")
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client_cls.return_value = mock_client
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path)
+
+        # Local finding from config.json, no HF API call for local path
+        local_findings = [f for f in findings if f.source == "local"]
+        assert len(local_findings) == 1
+        mock_client.get.assert_not_called()
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_hf_api_permissive_no_finding(self, mock_client_cls, tmp_path: Path):
+        """Permissive HF license should not produce a finding."""
+        src = tmp_path / "app.py"
+        src.write_text('model = AutoModel.from_pretrained("bert-base-uncased")\n', encoding="utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {"cardData": {"license": "apache-2.0"}, "tags": []}
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path)
+
+        assert all(f.source != "huggingface" for f in findings)
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_hf_api_network_error_does_not_crash(self, mock_client_cls, tmp_path: Path):
+        """Network errors during HF API lookup should be silently swallowed."""
+        src = tmp_path / "app.py"
+        src.write_text('model_id = "some/model"\n', encoding="utf-8")
+
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.side_effect = Exception("connection refused")
+        mock_client_cls.return_value = mock_client
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path)  # must not raise
+        assert isinstance(findings, list)
+
+    @patch("aicerberus.scanners.license.httpx.Client")
+    def test_scan_yaml_hf_model_discovered(self, mock_client_cls, tmp_path: Path):
+        """Model IDs in YAML config files are picked up and queried."""
+        cfg = tmp_path / "training.yaml"
+        cfg.write_text("base_model: meta-llama/Llama-2-7b-hf\nepochs: 3\n", encoding="utf-8")
+
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = {
+            "cardData": {"license": "llama2"},
+            "tags": [],
+        }
+        mock_client = MagicMock()
+        mock_client.__enter__ = MagicMock(return_value=mock_client)
+        mock_client.__exit__ = MagicMock(return_value=False)
+        mock_client.get.return_value = mock_resp
+        mock_client_cls.return_value = mock_client
+
+        scanner = LicenseScanner()
+        findings = scanner.scan(tmp_path)
+
+        hf_findings = [f for f in findings if f.source == "huggingface"]
+        assert len(hf_findings) == 1
+        assert hf_findings[0].package_or_model == "meta-llama/Llama-2-7b-hf"
+        assert hf_findings[0].severity == Severity.HIGH
