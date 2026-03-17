@@ -30,11 +30,13 @@ AICerberus is the **"Trivy for AI supply chains"** — a CLI tool that scans you
 ## Quick Start
 
 ```bash
-pip install aicerberus
+pip install git+https://github.com/hidearmoon/aicerberus.git
 cerberus scan .
 ```
 
 That's it. AICerberus will scan your current directory and report all findings.
+
+> **PyPI package coming soon.** Once published, `pip install aicerberus` will work directly.
 
 ---
 
@@ -51,10 +53,10 @@ That's it. AICerberus will scan your current directory and report all findings.
 ## Installation
 
 ```bash
-# PyPI (recommended)
-pip install aicerberus
+# Install directly from GitHub (recommended until PyPI release)
+pip install git+https://github.com/hidearmoon/aicerberus.git
 
-# From source
+# From source (for development)
 git clone https://github.com/hidearmoon/aicerberus
 cd aicerberus
 pip install -e .
