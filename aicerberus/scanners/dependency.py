@@ -4,7 +4,6 @@ from __future__ import annotations
 import re
 import sys
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -91,7 +90,7 @@ def _parse_pyproject_toml(content: bytes, source_file: str) -> list[tuple[str, s
         m = re.match(r"^([A-Za-z0-9_.-]+)(?:\[[^\]]*\])?(?:==|>=|<=|~=|!=)?([^\s,;]*)", dep)
         if m:
             pkg = m.group(1).lower()
-            ver = m.group(2).strip().lstrip(">=<=~!")
+            ver = re.sub(r"^[>=<~!]+", "", m.group(2).strip())
             results.append((pkg, ver, source_file))
 
     for pkg, ver_spec in poetry_deps.items():
@@ -118,7 +117,7 @@ def _parse_pipfile(content: str, source_file: str) -> list[tuple[str, str, str]]
     for section in ("packages", "dev-packages"):
         for pkg, ver_spec in data.get(section, {}).items():
             if isinstance(ver_spec, str):
-                ver = ver_spec.lstrip("^~>=<! =*")
+                ver = re.sub(r"^[\^~>=<! =*]+", "", ver_spec)
             else:
                 ver = ""
             results.append((pkg.lower(), ver, source_file))
@@ -150,7 +149,7 @@ def _parse_osv_response(
         cve_id = next((a for a in aliases if a.startswith("CVE-")), vuln_id)
 
         # Extract CVSS
-        cvss_score: Optional[float] = None
+        cvss_score: float | None = None
         severity = Severity.UNKNOWN
         for sev_entry in vuln.get("severity", []):
             if sev_entry.get("type") == "CVSS_V3":
@@ -170,7 +169,7 @@ def _parse_osv_response(
             severity = Severity.from_cvss(cvss_score)
 
         # Fix version
-        fixed_version: Optional[str] = None
+        fixed_version: str | None = None
         for affected in vuln.get("affected", []):
             for rng in affected.get("ranges", []):
                 for ev in rng.get("events", []):

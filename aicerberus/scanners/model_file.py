@@ -4,9 +4,7 @@ from __future__ import annotations
 import hashlib
 import io
 import pickletools
-import struct
 from pathlib import Path
-from typing import Optional
 
 from aicerberus.models import ModelFileFinding, RiskType, Severity
 
@@ -149,7 +147,7 @@ class ModelFileScanner:
                 found.append(fp)
         return sorted(set(found))
 
-    def scan_file(self, file_path: Path) -> Optional[ModelFileFinding]:
+    def scan_file(self, file_path: Path) -> ModelFileFinding | None:
         """Analyse a single model file and return a finding (or None if safe)."""
         ext = file_path.suffix.lower()
         meta = MODEL_EXTENSIONS.get(ext)

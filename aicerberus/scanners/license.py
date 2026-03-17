@@ -4,7 +4,6 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import httpx
 
@@ -151,7 +150,7 @@ def _normalise_license(raw: str) -> str:
 
 def _lookup_license_risk(
     license_id: str,
-) -> Optional[tuple[str, Severity, str]]:
+) -> tuple[str, Severity, str] | None:
     """Return (restriction_type, severity, description) or None if permissive/safe."""
     norm = _normalise_license(license_id)
     if norm in PERMISSIVE_LICENSES:
@@ -170,7 +169,7 @@ def _lookup_license_risk(
 class LicenseScanner:
     """Checks AI/ML package and model licenses for compliance issues."""
 
-    def __init__(self, hf_api_token: Optional[str] = None, timeout: float = 15.0) -> None:
+    def __init__(self, hf_api_token: str | None = None, timeout: float = 15.0) -> None:
         self._hf_token = hf_api_token
         self._timeout = timeout
 
@@ -181,7 +180,7 @@ class LicenseScanner:
             return {"Authorization": f"Bearer {self._hf_token}"}
         return {}
 
-    def check_hf_model(self, model_id: str) -> Optional[LicenseFinding]:
+    def check_hf_model(self, model_id: str) -> LicenseFinding | None:
         """Query HuggingFace API for model license info."""
         url = f"{HF_API_BASE}/{model_id}"
         try:
@@ -226,7 +225,7 @@ class LicenseScanner:
 
     # ── Local config.json / model card ───────────────────────────────────────
 
-    def check_local_model_card(self, config_path: Path) -> Optional[LicenseFinding]:
+    def check_local_model_card(self, config_path: Path) -> LicenseFinding | None:
         """Check a local HuggingFace config.json or README for license info."""
         try:
             data = json.loads(config_path.read_text(encoding="utf-8"))

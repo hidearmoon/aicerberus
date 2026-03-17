@@ -4,21 +4,16 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Optional
 
 import click
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
-from rich import box
 
 from aicerberus import __version__
 from aicerberus.engine import ScanEngine
 from aicerberus.models import (
-    DependencyFinding,
-    LicenseFinding,
-    ModelFileFinding,
     ScanResult,
     Severity,
 )
@@ -279,13 +274,13 @@ def main() -> None:
 def scan(
     path: Path,
     output_format: str,
-    severity: Optional[str],
+    severity: str | None,
     fix: bool,
     skip_deps: bool,
     skip_models: bool,
     skip_licenses: bool,
-    hf_token: Optional[str],
-    output: Optional[Path],
+    hf_token: str | None,
+    output: Path | None,
     quiet: bool,
 ) -> None:
     """Scan PATH for AI/ML supply chain risks.

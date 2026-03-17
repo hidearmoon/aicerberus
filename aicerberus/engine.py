@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 from aicerberus.models import ScanResult
 from aicerberus.scanners.dependency import DependencyScanner
@@ -17,8 +17,8 @@ class ScanEngine:
     def __init__(
         self,
         osv_timeout: float = 30.0,
-        hf_api_token: Optional[str] = None,
-        progress_callback: Optional[Callable[[str], None]] = None,
+        hf_api_token: str | None = None,
+        progress_callback: Callable[[str], None] | None = None,
     ) -> None:
         self._dep_scanner = DependencyScanner(timeout=osv_timeout)
         self._model_scanner = ModelFileScanner()

@@ -4,7 +4,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Optional
 
 
 class Severity(str, Enum):
@@ -15,7 +14,7 @@ class Severity(str, Enum):
     UNKNOWN = "UNKNOWN"
 
     @classmethod
-    def from_cvss(cls, score: float) -> "Severity":
+    def from_cvss(cls, score: float) -> Severity:
         if score >= 9.0:
             return cls.CRITICAL
         elif score >= 7.0:
@@ -44,9 +43,9 @@ class CVEInfo:
     """Details about a specific CVE."""
     cve_id: str
     severity: Severity
-    cvss_score: Optional[float]
+    cvss_score: float | None
     summary: str
-    fixed_version: Optional[str] = None
+    fixed_version: str | None = None
     references: list[str] = field(default_factory=list)
 
 
